@@ -259,13 +259,14 @@ prop.table(table(df4$Attr59 == 0))
 
 nearZeroVar(df5,
             saveMetrics = TRUE)
-
+# Incentive to remove Attr69 from further analysis - no variance and constant values of 0 - same for Attr6 and Attr59
 
 
 # Outliers boxplot
 m1 <- melt(df5[,-which(names(df5) %in% factor_vars)])
 p <- ggplot(m1, aes(factor(variable), value)) 
 p + geom_boxplot() + facet_wrap(~variable, scale="free")
+
 
 # Splitting dataset into training and testing datasets
 which_train <- createDataPartition(df5$class, 
@@ -278,8 +279,6 @@ year1_test <- df5[-which_train,]
 # Creating model
 
 model_formula <- class ~ . - Attr68 -1
-
-ctrl_nocv <- trainControl(method = "none")
 
 ctrl_cv5 <- trainControl(method = "cv",
                          number = 5)
@@ -294,20 +293,15 @@ year1_logit_forward <-
 summary(year1_logit_forward)
 
 
-year1_predicted <- predict(year1_logit_forward,
-                           type = "prob")
-
-head(year1_predicted)
-
-
-
-
+# Predicting values on training set
 year1_logit_fitted <- predict(year1_logit_forward,
                                         year1_train,
                                         type = "prob")
 
 head(year1_logit_fitted)
 
+
+# Confusion matrix for train data
 confusionMatrix(data = as.factor(ifelse(year1_logit_fitted["1"] > 0.05, 
                                         1,
                                         0)), 
@@ -315,6 +309,7 @@ confusionMatrix(data = as.factor(ifelse(year1_logit_fitted["1"] > 0.05,
                 positive = "1") 
 
 
+# Forecasting probabilities for test data
 year1_logit_forecasts <- predict(year1_logit_forward,
                                            year1_test,
                                            type = "prob")
@@ -322,7 +317,7 @@ year1_logit_forecasts <- predict(year1_logit_forward,
 
 
 
-# Confusion matrix 
+# Confusion matrix for test data
 confusionMatrix(data = as.factor(ifelse(year1_logit_forecasts["1"] > 0.05, 
                                         1,
                                         0)), 
@@ -330,19 +325,21 @@ confusionMatrix(data = as.factor(ifelse(year1_logit_forecasts["1"] > 0.05,
                 positive = "1") 
 
 
-# ROC Curve
-roc.plot(ifelse(year1_train$class == "1", 1, 0),
+# ROC Curve for test data
+roc.plot(ifelse(year1_test$class == "1", 1, 0),
          year1_predicted[,2])
 
-# ROC Area
-roc.area(ifelse(year1_train$class == "1", 1, 0),
+# ROC Area for test data
+roc.area(ifelse(year1_test$class == "1", 1, 0),
                 year1_predicted[,2])
 
 
 
 
-
-
+s <- c("Attr2", "Attr3", "Attr5", "Attr6", "Attr9", "Attr10", "Attr12", "Attr15", 
+       "Attr25", "Attr29", "Attr33", "Attr34", "Attr36", "Attr38", "Attr41", "Attr48", 
+       "Attr49", "Attr50", "Attr51", "Attr55", "Attr56", "Attr57", "Attr59", "Attr61", 
+       "Attr64", "Attr65",  "Attr67", "Attr68", "Attr66", "Attr69")
 
 
 
