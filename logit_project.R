@@ -43,7 +43,14 @@ if(!require(verification)){
   install.packages("verification")
   library(verification)
 }
-
+if(!require(Information)){
+  install.packages("Information")
+  library(Information)
+}
+if(!require(smbinning)){
+  install.packages("smbinning")
+  library(smbinning)
+}
 
 # Setting seed for reproduciblity
 set.seed(361309)
@@ -344,36 +351,73 @@ s <- c("Attr2", "Attr3", "Attr5", "Attr6", "Attr9", "Attr10", "Attr12", "Attr15"
 
 
 
-#----------------------------------------------------------------------- LASSO 
+#----------------------------------------------------------------------- NEURAL
+
+year1_selected_vars <- 
+  year1_train %>% 
+  mutate(class_1 = ifelse(class == 1, 1, 0))
+
+year1_IV <- create_infotables(data = year1_selected_vars, # data
+                                y = "class_1", # dependent variable
+                                bins = 20) # number of bins created 
+year1_IV_values <- data.frame(year1_IV$Summary)
+print(year1_IV_values)
+
+Attr12_binned = smbinning(df = data.frame(year1_train %>% 
+                                          mutate(class_1 = 
+                                                   ifelse(class == 1, 
+                                                          1, 
+                                                          0))),
+                        y = "class_1",
+                        x = "Attr12", 
+                        p = 0.01)
+
+Attr12_binned$ivtable
+Attr12_binned$ivtable$WoE
+
+Attr15_binned = smbinning(df = data.frame(year1_train %>% 
+                                            mutate(class_1 = 
+                                                     ifelse(class == 1, 
+                                                            1, 
+                                                            0))),
+                          y = "class_1",
+                          x = "Attr15", 
+                          p = 0.05)
+Attr15_binned$ivtable
+Attr15_binned$ivtable$WoE
+
+Attr55_binned = smbinning(df = data.frame(year1_train %>% 
+                                            mutate(class_1 = 
+                                                     ifelse(class == 1, 
+                                                            1, 
+                                                            0))),
+                          y = "class_1",
+                          x = "Attr55", 
+                          p = 0.01)
+Attr55_binned$ivtable
+Attr55_binned$ivtable$WoE
+
+Attr3_binned = smbinning(df = data.frame(year1_train %>% 
+                                            mutate(class_1 = 
+                                                     ifelse(class == 1, 
+                                                            1, 
+                                                            0))),
+                          y = "class_1",
+                          x = "Attr3", 
+                          p = 0.01)
+Attr3_binned$ivtable
+Attr3_binned$ivtable$WoE
 
 
+year1_train <- 
+  smbinning.gen(year1_train,
+                Attr12_binned,
+                "Attr12_BINNED")
 
-parameters_lasso <- expand.grid(alpha = c(0,1),
-                                lambda = seq(0, 0.30, 0.01))
+year1_train$Attr12_WoE <- year1_train$Attr12_BINNED
 
-year1_lasso <- train(model_formula, 
-                     data = year1_train,
-                     method = "glmnet", 
-                     family="binomial",
-                     tuneGrid = parameters_lasso,
-                     trControl = ctrl_cv5)
+levels(year1_train$Attr12_WoE) <- 
+  Attr12_binned$ivtable$WoE[1:nlevels(year1_train$Attr12_WoE)]
 
-year1_lasso
-
-plot(year1_lasso)
-
-# what is the best lambda value (giving the lowest error
-# forecasts based on cross validation)?
-
-year1_lasso$bestTune$lambda
-
-# very close to 0 (similar to OLS)
-
-# zobaczmy współczynniki dla zmiennych w tym modelu 
-
-predict(year1_lasso$finalModel, # stored model
-        s = year1_lasso$bestTune$lambda, # lambda
-        type = "coefficients")
-
-year1_lasso_model <- year1_lasso$finalModel
-
+year1_train$Attr12_WoE <-
+  as.numeric(levels(year1_train$Attr12_WoE))[year1_train$Attr12_WoE] 
