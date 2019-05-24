@@ -51,6 +51,15 @@ if(!require(smbinning)){
   install.packages("smbinning")
   library(smbinning)
 }
+if(!require(DescTools)){
+  install.packages("DescTools")
+  library(DescTools)
+}
+if(!require(foreach)){
+  install.packages("foreach")
+  library(foreach)
+}
+
 
 # Setting seed for reproduciblity
 set.seed(361309)
@@ -275,38 +284,75 @@ p <- ggplot(m1, aes(factor(variable), value))
 p + geom_boxplot() + facet_wrap(~variable, scale="free")
 
 
+# Variables transformation
+Attr12_binned = smbinning.custom(df = data.frame(df5 %>%
+                                                   mutate(class_1 =
+                                                            ifelse(class == 1,
+                                                                   1,
+                                                                   0))),
+                                 y = "class_1",
+                                 x = "Attr12",
+                                 cuts = 0.06
+)
+Attr12_binned$ivtable
+Attr12_binned$ivtable$WoE
+
+df5 <- 
+  smbinning.gen(df5,
+                Attr12_binned,
+                "Attr12_BINNED")
+levels(df5$Attr12_BINNED) <- 
+  Attr12_binned$ivtable$WoE[1:nlevels(df5$Attr12_BINNED)]
+
+df5$Attr12_BINNED <-
+  as.numeric(levels(df5$Attr12_BINNED))[df5$Attr12_BINNED]
+
+
+
+
 # Splitting dataset into training and testing datasets
-which_train <- createDataPartition(df5$class, 
-                                   p = 0.7, 
-                                   list = FALSE) 
+which_train <- createDataPartition(df5$class,
+                                   p = 0.7,
+                                   list = FALSE)
 year1_train <- df5[which_train,]
 year1_test <- df5[-which_train,]
 
 
+
 # Creating model
 
-model_formula <- class ~ . - Attr68 -1
+model_formula <- class ~ . + Attr2:Attr29 + I(Attr2^2) + Attr9:I(exp(Attr29)) + Attr29:Attr55 - Attr68 - Attr69 - Attr12 
+
+
+year_gow <- glm(model_formula,
+                data = year1_train,
+                family="binomial")
+
+summary(year_gow)
+
 
 ctrl_cv5 <- trainControl(method = "cv",
                          number = 5)
 
-year1_logit_forward <- 
+registerDoSEQ()
+set.seed(361309)
+
+year1_logit_f <-
   train(model_formula,
         data = year1_train,
         method = "glmStepAIC",
-        direction = "forward", 
+        direction = "forward",
         trControl = ctrl_cv5)
 
-summary(year1_logit_forward)
+summary(year1_logit_f)
 
 
 # Predicting values on training set
-year1_logit_fitted <- predict(year1_logit_forward,
+year1_logit_fitted <- predict(year1_logit_f,
                                         year1_train,
                                         type = "prob")
 
 head(year1_logit_fitted)
-
 
 # Confusion matrix for train data
 confusionMatrix(data = as.factor(ifelse(year1_logit_fitted["1"] > 0.05, 
@@ -317,7 +363,7 @@ confusionMatrix(data = as.factor(ifelse(year1_logit_fitted["1"] > 0.05,
 
 
 # Forecasting probabilities for test data
-year1_logit_forecasts <- predict(year1_logit_forward,
+year1_logit_forecasts <- predict(year1_logit_f,
                                            year1_test,
                                            type = "prob")
 
@@ -334,12 +380,19 @@ confusionMatrix(data = as.factor(ifelse(year1_logit_forecasts["1"] > 0.05,
 
 # ROC Curve for test data
 roc.plot(ifelse(year1_test$class == "1", 1, 0),
-         year1_predicted[,2])
+         year1_logit_forecasts[,2])
 
 # ROC Area for test data
 roc.area(ifelse(year1_test$class == "1", 1, 0),
-                year1_predicted[,2])
+         year1_logit_forecasts[,2])
 
+# ROC Curve for test data
+roc.plot(ifelse(year1_train$class == "1", 1, 0),
+         year1_logit_fitted[,2])
+
+# ROC Area for test data
+roc.area(ifelse(year1_train$class == "1", 1, 0),
+         year1_logit_fitted[,2])
 
 
 
@@ -353,71 +406,50 @@ s <- c("Attr2", "Attr3", "Attr5", "Attr6", "Attr9", "Attr10", "Attr12", "Attr15"
 
 #----------------------------------------------------------------------- NEURAL
 
-year1_selected_vars <- 
-  year1_train %>% 
-  mutate(class_1 = ifelse(class == 1, 1, 0))
 
-year1_IV <- create_infotables(data = year1_selected_vars, # data
-                                y = "class_1", # dependent variable
-                                bins = 20) # number of bins created 
-year1_IV_values <- data.frame(year1_IV$Summary)
-print(year1_IV_values)
+small_formula <- class ~ Attr66 + Attr38 + Attr57 + Attr49 + Attr6 + Attr56 + 
+  Attr51 + Attr36 + Attr2 + Attr10 + Attr65
 
-Attr12_binned = smbinning(df = data.frame(year1_train %>% 
-                                          mutate(class_1 = 
-                                                   ifelse(class == 1, 
-                                                          1, 
-                                                          0))),
-                        y = "class_1",
-                        x = "Attr12", 
-                        p = 0.01)
+levels(year1_train$class) <- make.names(levels(factor(year1_train$class)))
 
-Attr12_binned$ivtable
-Attr12_binned$ivtable$WoE
+fitControl <- trainControl(method = "repeatedcv", 
+                           number = 5,
+                           classProbs = TRUE, 
+                           summaryFunction = twoClassSummary)
 
-Attr15_binned = smbinning(df = data.frame(year1_train %>% 
-                                            mutate(class_1 = 
-                                                     ifelse(class == 1, 
-                                                            1, 
-                                                            0))),
-                          y = "class_1",
-                          x = "Attr15", 
-                          p = 0.05)
-Attr15_binned$ivtable
-Attr15_binned$ivtable$WoE
+nnetGrid <-  expand.grid(size = seq(from = 60, to = 80, by = 5),
+                         decay = seq(from = 0.1, to = 0.5, by = 0.1))
 
-Attr55_binned = smbinning(df = data.frame(year1_train %>% 
-                                            mutate(class_1 = 
-                                                     ifelse(class == 1, 
-                                                            1, 
-                                                            0))),
-                          y = "class_1",
-                          x = "Attr55", 
-                          p = 0.01)
-Attr55_binned$ivtable
-Attr55_binned$ivtable$WoE
-
-Attr3_binned = smbinning(df = data.frame(year1_train %>% 
-                                            mutate(class_1 = 
-                                                     ifelse(class == 1, 
-                                                            1, 
-                                                            0))),
-                          y = "class_1",
-                          x = "Attr3", 
-                          p = 0.01)
-Attr3_binned$ivtable
-Attr3_binned$ivtable$WoE
+nnetFit <- train(small_formula, 
+                 data = year1_train,
+                 method = "nnet",
+                 metric = "ROC",
+                 trControl = fitControl,
+                 tuneGrid = nnetGrid,
+                 verbose = FALSE,
+                 maxit = 350)
+nnetFit
 
 
-year1_train <- 
-  smbinning.gen(year1_train,
-                Attr12_binned,
-                "Attr12_BINNED")
+nnet_forecasts <- predict(nnetFit,
+                                 year1_test,
+                                 type = "prob")
 
-year1_train$Attr12_WoE <- year1_train$Attr12_BINNED
 
-levels(year1_train$Attr12_WoE) <- 
-  Attr12_binned$ivtable$WoE[1:nlevels(year1_train$Attr12_WoE)]
 
-year1_train$Attr12_WoE <-
-  as.numeric(levels(year1_train$Attr12_WoE))[year1_train$Attr12_WoE] 
+
+# Confusion matrix for test data
+confusionMatrix(data = as.factor(ifelse(nnet_forecasts[2] > 0.05, 
+                                        1,
+                                        0)), 
+                reference = year1_test$class, 
+                positive = "1") 
+
+
+# saveRDS(year1_logit, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_logit.rda")
+# saveRDS(nnetFit, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/nnetFit.rda")
+
+# year1_logit <- readRDS(file = "year1_logit.rda")
+# year1_nnet <- readRDS(file = "nnetFit.rda")
+
+
