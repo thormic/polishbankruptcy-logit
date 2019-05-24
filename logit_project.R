@@ -59,6 +59,14 @@ if(!require(foreach)){
   install.packages("foreach")
   library(foreach)
 }
+if(!require(stargazer)){
+  install.packages("stargazer")
+  library(stargazer)
+}
+if(!require(ResourceSelection)){
+  install.packages("ResourceSelection")
+  library(ResourceSelection)
+}
 
 
 # Setting seed for reproduciblity
@@ -176,9 +184,6 @@ df3 <- df2[-which(rownames(df2) %in% na_rows),]
 
 
 
-
-
-
 # Creating correlation matrix
 df3[,-which(names(df3) %in% factor_vars)] %>%
   as.matrix() %>% 
@@ -284,7 +289,7 @@ p <- ggplot(m1, aes(factor(variable), value))
 p + geom_boxplot() + facet_wrap(~variable, scale="free")
 
 
-# Variables transformation
+# Variables transformation - binning Attr12
 Attr12_binned = smbinning.custom(df = data.frame(df5 %>%
                                                    mutate(class_1 =
                                                             ifelse(class == 1,
@@ -339,14 +344,20 @@ ctrl_cv5 <- trainControl(method = "cv",
 registerDoSEQ()
 set.seed(361309)
 
+
+# Load logit model
+year1_logit <- readRDS(file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_logit_forward.rda")
+
+
+
 # Calculating logit with forward propagation with AIC as a cost function
-year1_logit <-
-  train(model_formula,
-        data = year1_train,
-        method = "glmStepAIC",
-        direction = "forward",
-        trControl = ctrl_cv5)
-summary(year1_logit)
+# year1_logit <-
+#   train(model_formula,
+#         data = year1_train,
+#         method = "glmStepAIC",
+#         direction = "forward",
+#         trControl = ctrl_cv5)
+# summary(year1_logit)
 
 
 # Predicting values on training set
@@ -357,7 +368,7 @@ year1_logit_fitted <- predict(year1_logit,
 head(year1_logit_fitted)
 
 # Confusion matrix for train data
-confusionMatrix(data = as.factor(ifelse(year1_logit_fitted["1"] > 0.05, 
+logit_matrix <- confusionMatrix(data = as.factor(ifelse(year1_logit_fitted["1"] > 0.05, 
                                         1,
                                         0)), 
                 reference = year1_train$class, 
@@ -397,6 +408,13 @@ roc.area(ifelse(year1_train$class == "1", 1, 0),
          year1_logit_fitted[,2])
 
 
+# Hosmer and Lemeshow GOF test
+hl <- hoslem.test(year1_logit$finalModel$y, year1_logit$finalModel$fitted.values, g=10)
+hl
+
+year1_logit_sum <- year1_logit$finalModel
+year1_logit_sum$call <- year1_base$call 
+
 # List of all variables in train set (maybe it will be useful somewhere)
 # s <- c("Attr2", "Attr3", "Attr5", "Attr6", "Attr9", "Attr10", "Attr12", "Attr15", 
 #        "Attr25", "Attr29", "Attr33", "Attr34", "Attr36", "Attr38", "Attr41", "Attr48", 
@@ -404,16 +422,27 @@ roc.area(ifelse(year1_train$class == "1", 1, 0),
 #        "Attr64", "Attr65",  "Attr67", "Attr68", "Attr66", "Attr69")
 
 
+# Printing confusion matrices (can save those to .csv table)
+as.table(logit_matrix)
+as.matrix(logit_matrix,what="overall")
+as.matrix(logit_matrix, what = "classes")
 
 
 #----------------------------------------------------------------------- NEURAL
+
+
+# Load saved nnet model
+year1_nnet <- readRDS(file = "nnetFit.rda")
+
+
 
 # Formula with variables used in saved logit 
 small_formula <- class ~ Attr66 + Attr38 + Attr57 + Attr49 + Attr6 + Attr56 + 
   Attr51 + Attr36 + Attr2 + Attr10 + Attr65
 
-# Releveling class so it is compatible with NeuralNetwork (although it messes up logit)
-levels(year1_train$class) <- make.names(levels(factor(year1_train$class)))
+
+# (??????NOT NEEDED???????) Releveling class so it is compatible with NeuralNetwork (although it messes up logit)
+# levels(year1_train$class) <- make.names(levels(factor(year1_train$class)))
 
 
 fitControl <- trainControl(method = "repeatedcv", 
@@ -422,27 +451,27 @@ fitControl <- trainControl(method = "repeatedcv",
                            summaryFunction = twoClassSummary)
 
 # We try to choose the best number of nodes in hidden layer and the decay value for NN
-nnetGrid <-  expand.grid(size = seq(from = 60, to = 80, by = 5),
-                         decay = seq(from = 0.1, to = 0.5, by = 0.1))
-
-nnetFit <- train(small_formula, 
-                 data = year1_train,
-                 method = "nnet",
-                 metric = "ROC",
-                 trControl = fitControl,
-                 tuneGrid = nnetGrid,
-                 verbose = FALSE,
-                 maxit = 400)
-nnetFit
+# nnetGrid <-  expand.grid(size = seq(from = 60, to = 80, by = 5),
+#                          decay = seq(from = 0.1, to = 0.5, by = 0.1))
+# 
+# year1_nnet <- train(small_formula, 
+#                  data = year1_train,
+#                  method = "nnet",
+#                  metric = "ROC",
+#                  trControl = fitControl,
+#                  tuneGrid = nnetGrid,
+#                  verbose = FALSE,
+#                  maxit = 400)
+# year1_nnet
 
 # Predicting NN results on test data
-nnet_forecasts <- predict(nnetFit,
+nnet_forecasts <- predict(year1_nnet,
                                  year1_test,
                                  type = "prob")
 
 
 # Confusion matrix for test data
-confusionMatrix(data = as.factor(ifelse(nnet_forecasts[2] > 0.05, 
+nnet_matrix <- confusionMatrix(data = as.factor(ifelse(nnet_forecasts[2] > 0.05, 
                                         1,
                                         0)), 
                 reference = year1_test$class, 
@@ -457,23 +486,19 @@ roc.area(ifelse(year1_test$class == "1", 1, 0),
          nnet_forecasts[,2])
 
 
-# saveRDS(year1_logit, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_logit.rda")
-# saveRDS(nnetFit, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/nnetFit.rda")
-
-# year1_logit <- readRDS(file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_logit.rda")
-# year1_nnet <- readRDS(file = "nnetFit.rda")
-
-# Hosmer and Lemeshow GOF test
-hl <- hoslem.test(year1_logit_f$finalModel$y, year1_logit_f$finalModel$fitted.values, g=10)
-hl
-
-explanatory = c("Attr66", "Attr38", "Attr57", "Attr49", "Attr6", "Attr56", 
-  "Attr51", "Attr36", "Attr2", "Attr10", "Attr65")
-dependent = c("class")
-year1_train %>% 
-  finalfit(dependent, explanatory)
-stargazer(year_gow, logitt, title="Results", align=TRUE,out = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/tab.html")
+# Printing confusion matrices (can save those to .csv table)
+as.table(nnet_matrix)
+as.matrix(nnet_matrix,what="overall")
+as.matrix(nnet_matrix, what = "classes")
 
 
-logitt <- year1_logit$finalModel
-logitt$call <- year_gow$call  
+# Creating table in LaTeX but exporting it to html file
+stargazer(year1_base, year1_logit_sum, title="Results", align=TRUE,out = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/tab.html")
+
+
+
+
+# Saving models to files (DON'T)
+# saveRDS(year1_logit, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_logit_2.rda")
+# saveRDS(nnetFit, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/nnetFit_2.rda")
+
