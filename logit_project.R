@@ -84,10 +84,12 @@ df %>%
 
 
 # Checking how many NA's there are for each variable
-df %>% 
+most_nas <- df %>% 
   summarise_all(funs(sum(is.na(.)))) %>% 
   Filter(function(x) { x > 0},.) %>% 
-  sort(decreasing = TRUE)
+  sort(decreasing = TRUE) %>% 
+  .[1:5] %>% 
+  colnames(.)
 
 
 # Checking how many rows are with NA's
@@ -96,17 +98,18 @@ df %>%
   is.na() %>% 
   rowSums() %>% 
   Filter(function(x) x > 0,.) %>% 
-  sort(decreasing = TRUE)
+  sort(decreasing = TRUE) %>% 
+  length()
 
 
 # Plotting NA's
-aggr(df, 
+aggr(df[,which(colnames(df) %in% most_nas)], 
      numbers = TRUE, 
      prop = FALSE,
      sortVars = TRUE, # sort variables by # of missings
      cex.axis = .5, # decrease the labels on axes 
-     gap = 2, # limit the gap between plots (default = 4)
-     ylab = c("Number of misisngs", "pattern")) # labels for y
+     gap = 3, # limit the gap between plots (default = 4)
+     ylab = c("Number of misisng", "Pattern")) # labels for y
 
 
 # Setting factor variables for missing data 
@@ -130,6 +133,7 @@ df %>%
   Filter(function(x) { x > 0.03*nrow(df)},.) %>% 
   colnames() 
 
+# Adding most of the columns which we omit because factor variables above
 na_columns <- c("Attr21", "Attr27", "Attr37", "Attr60", "Attr45", "Attr24")
 
 # Subsetting dataframe without highly not available data
@@ -191,7 +195,7 @@ df3[,-which(names(df3) %in% factor_vars)] %>%
   corrplot(., method="circle",type = "upper")
 
 
-# Choosing variables which are correlated with over 6 others with corr > 0.95
+# Choosing variables which are correlated with over 2 others with corr > 0.9
 df3[,-which(names(df3) %in% factor_vars)] %>%
   na.omit() %>% 
   as.matrix() %>% 
@@ -258,11 +262,11 @@ for (i in names(df4[,-which(names(df4) %in% factor_vars)])) {
   H_2 <- 3 * IQR(x, na.rm = T)
   H_3 <- 4.5 * IQR(x, na.rm = T)
   x[x < (qnt[1] - H_3)] <- NA
-  x[x < (qnt[1] - H_2)] <- med
-  x[x < (qnt[1] - H)] <- caps[1]
+  x[x < (qnt[1] - H_2)] <- caps[1]
+  x[x < (qnt[1] - H)] <- med
   x[x > (qnt[2] + H_3)] <- NA
-  x[x > (qnt[2] + H_2)] <- med
-  x[x > (qnt[2] + H)] <- caps[2]
+  x[x > (qnt[2] + H_2)] <- caps[2]
+  x[x > (qnt[2] + H)] <- med
   df4[[i]] <- x
 }
 df5 <- df4[complete.cases(df4),]
@@ -270,7 +274,8 @@ df5 <- df4[complete.cases(df4),]
 # Histograms of all variables
 ggplot(gather(df5[,-which(names(df5) %in% factor_vars)]), aes(value)) + 
   geom_histogram(bins = 100) + 
-  facet_wrap(~key, scales = 'free_x')
+  facet_wrap(~key, scales = 'free_x') +
+  ylim(0, 700)
 
 
 # Checking those varaibles with a lot of zeroes
@@ -328,7 +333,19 @@ year1_test <- df5[-which_train,]
 ###################################### Creating models
 
 # Basic formula for base model
-model_formula <- class ~ . + Attr2:Attr29 + I(Attr2^2) + Attr9:I(exp(Attr29)) + Attr29:Attr55 - Attr68 - Attr69 - Attr12 
+model_formula <- (class ~ . + Attr2:Attr29 + 
+                    I(Attr2^2) + 
+                    Attr9:I(exp(Attr29)) + 
+                    Attr2:Attr51 +
+                    Attr3:Attr10 +
+                    Attr3:Attr25 + 
+                    Attr3:Attr38 +
+                    Attr25:Attr38 +
+                    Attr49:Attr56 +
+                    Attr29:Attr55 - 
+                    Attr68 - 
+                    Attr69 - 
+                    Attr12) 
 
 # Calculating logit on all variables
 year1_base <- glm(model_formula,
