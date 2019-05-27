@@ -67,17 +67,14 @@ if(!require(ResourceSelection)){
   install.packages("ResourceSelection")
   library(ResourceSelection)
 }
-if(!require(margins)){
-  install.packages("margins")
-  library(margins)
-}
+
 
 # Setting seed for reproduciblity
 set.seed(361309)
 
 
 # Loading dataset
-df <- read.arff("data/1year.arff")
+df <- read.arff("data/5year.arff")
 
 
 # Checking how many defaults are in the dataset
@@ -168,7 +165,7 @@ na_rows <- df2 %>%
   rowwise() %>% 
   is.na() %>% 
   rowSums() %>% 
-  Filter(function(x) x >= 2,.) %>% 
+  Filter(function(x) x >= 1,.) %>% 
   list() %>% 
   do.call(rbind, .) %>% 
   colnames() %>% 
@@ -212,10 +209,10 @@ df3[,-which(names(df3) %in% factor_vars)] %>%
   .[,1]
 
 
-corr_columns <- c("Attr1", "Attr11", "Attr13", "Attr14", "Attr16", "Attr17", "Attr18", "Attr19", 
-                  "Attr20", "Attr22", "Attr23", "Attr26", "Attr28", "Attr30", "Attr31", "Attr32", 
-                  "Attr35", "Attr39", "Attr4", "Attr40", "Attr42", "Attr43", "Attr44", "Attr46", 
-                  "Attr47", "Attr52", "Attr53", "Attr54", "Attr58", "Attr62", "Attr63", "Attr7", "Attr8")
+corr_columns <- c("Attr1", "Attr10", "Attr12", "Attr14", "Attr16", "Attr17", "Attr18", "Attr19", 
+                  "Attr2", "Attr23", "Attr25", "Attr26", "Attr28", "Attr31", "Attr33", 
+                  "Attr34", "Attr38", "Attr4", "Attr40", "Attr46", 
+                  "Attr50", "Attr53", "Attr54", "Attr63", "Attr64","Attr7", "Attr8")
 
 # Omitting highly correlated variables
 df4 <- df3[,-which(names(df3) %in% corr_columns)]
@@ -238,7 +235,7 @@ df4 %>%
   length()
 
 
-# ------------------------------ NO NA's REMAINING
+# ------------------------------ NO NA's REMAINING, HURRAY!
 
 
 # Creating correlation matrix for final dataset
@@ -262,8 +259,8 @@ for (i in names(df4[,-which(names(df4) %in% factor_vars)])) {
   qnt <- quantile(x, probs=c(.25, .75), na.rm = T)
   caps <- quantile(x, probs=c(.05, .95), na.rm = T)
   H <- 1.5 * IQR(x, na.rm = T)
-  H_2 <- 3 * IQR(x, na.rm = T)
-  H_3 <- 4.5 * IQR(x, na.rm = T)
+  H_2 <- 5 * IQR(x, na.rm = T)
+  H_3 <- 10 * IQR(x, na.rm = T)
   x[x < (qnt[1] - H_3)] <- NA
   x[x < (qnt[1] - H_2)] <- caps[1]
   x[x < (qnt[1] - H)] <- med
@@ -273,6 +270,11 @@ for (i in names(df4[,-which(names(df4) %in% factor_vars)])) {
   df4[[i]] <- x
 }
 df5 <- df4[complete.cases(df4),]
+
+df5 %>% 
+  filter(class == 1) %>% 
+  nrow() %>% 
+  '/'(nrow(df5))
 
 # Histograms of all variables
 ggplot(gather(df5[,-which(names(df5) %in% factor_vars)]), aes(value)) + 
@@ -288,7 +290,7 @@ prop.table(table(df4$Attr59 == 0))
 
 nearZeroVar(df5,
             saveMetrics = TRUE)
-# Incentive to remove Attr69 from further analysis - no variance and constant values of 0
+# Incentive to remove Attr69 from further analysis - no variance and constant values of 0 - same for Attr6 and Attr59
 
 
 # Outliers boxplot
@@ -331,56 +333,11 @@ which_train <- createDataPartition(df5$class,
 year1_train <- df5[which_train,]
 year1_test <- df5[-which_train,]
 
-# Releveling class so it is compatible with summarizing function
 levels(year1_train$class) <- make.names(levels(factor(year1_train$class)))
 
 
-###################################### Creating models
-# Formula for basic model
-b_formula <- class ~ .
-
-# Formula for basic + interactions
-b_i_formula <- (class ~ . + Attr2:Attr29 + Attr12_BINNED +
-                  I(Attr2^2) + 
-                    I(Attr25^3) +
-                    I(log1p(Attr61)) +
-                    I(log1p(Attr64)) +
-                    Attr66:Attr12_BINNED +
-                    Attr66:Attr38 +
-                    Attr9:I(exp(Attr29)) + 
-                    Attr2:Attr51 +
-                    Attr2:Attr66 +
-                    Attr2:Attr3 +
-                    Attr3:Attr10 +
-                    Attr3:Attr25 + 
-                    Attr3:Attr38 +
-                    Attr25:Attr38 +
-                    Attr49:Attr56 +
-                    Attr29:Attr55 - 
-                    Attr69 - 
-                    Attr12) 
-
-# Formula for chosen + interactions
-c_i_formula <- (class ~ Attr2 + Attr6 + Attr10 + Attr15 + Attr33 + Attr38 + Attr50 + 
-                  Attr55 + Attr56 + Attr57 + Attr64 + Attr65 + Attr66 + Attr68 +
-                  I(Attr2^2) + 
-                  I(Attr25^3) + 
-                  Attr2:Attr51 + 
-                  Attr3:Attr10 + 
-                  Attr3:Attr38 + 
-                  Attr25:Attr38 + 
-                  Attr49:Attr56 + 
-                  Attr29:Attr55) 
-
-# Formula for chosen
-c_formula <- (class ~ Attr2 + Attr3 + Attr6 + Attr9 + Attr10 + Attr12 + Attr15 + Attr33 + 
-                      Attr38 + Attr49 + Attr50 + Attr51 + Attr56 + Attr57 + Attr65 + 
-                      Attr66 + Attr68)
-
-# Setting Crossvalidation method with custom summary function
-ctrl_cv5 <- trainControl(method = "repeatedcv",
+ctrl_cv5 <- trainControl(method = "cv",
                          number = 5,
-                         repeats = 5,
                          summaryFunction = function(...) customTwoClassSummary(..., 
                                                                                positive = "X1", negative="X0"), 
                          classProbs = TRUE)
@@ -396,128 +353,46 @@ customTwoClassSummary <- function(data, lev = NULL, model = NULL, positive = NUL
   rocAUC <- ModelMetrics::auc(ifelse(data$obs == lev[2], 0, 
                                      1), data[, lvls[1]])
   probs <- data[,lvls[2]]
-  class <- as.factor(ifelse(probs > 0.02, lvls[2], lvls[1]))
+  class <- as.factor(ifelse(probs > 0.04, lvls[2], lvls[1]))
   out <- c(rocAUC, 
            sensitivity(class, data[, "obs"], positive=positive), 
            specificity(class, data[, "obs"], negative=negative)
-           )
+  )
   names(out) <- c("ROC", "Sens", "Spec")
   out
 }
 
-############################################################ MODEL 1
-# Estimating forecast accuracy
-year1_1 <-
-  train(b_i_formula,
-        data = year1_train,
-        method = "glm",
-        family = "binomial",
-        trControl = ctrl_cv5)
-year1_1
-
-
-# Forecasting probabilities for test data
-year1_1_forecasts <- predict(year1_1,
-                                 year1_test,
-                                 type = "prob")
-
-
-# Confusion matrix for test data
-confusionMatrix(data = as.factor(ifelse(year1_1_forecasts[,2] > 0.02, 
-                                        "1",
-                                        "0")), 
-                reference = year1_test$class, 
-                positive = "1")
-
-# ROC Curve for test data
-roc.plot(ifelse(year1_test$class == "1", 1, 0),
-         year1_1_forecasts[,2])
-
-# ROC Area for test data
-roc.area(ifelse(year1_test$class == "1", 1, 0),
-         year1_1_forecasts[,2])
-
-############################################################ MODEL 2
 # Next logit did not work without that command
 registerDoSEQ()
 set.seed(361309)
 
 # Calculating logit with forward propagation with AIC as a cost function
-# year1_2 <-
-#   train(b_i_formula,
-#         data = year1_train,
-#         method = "glmStepAIC",
-#         direction = "both",
-#         trControl = ctrl_cv5)
-
-
-year1_2 <- train(c_i_formula,
-      data = year1_train,
-      method = "glm",
-      family = "binomial",
-      trControl = ctrl_cv5)
-
-year1_2
-
-
-# Forecasting probabilities for test data
-year1_2_forecasts <- predict(year1_2,
-                               year1_test,
-                               type = "prob")
-
-
-# Confusion matrix for test data
-confusionMatrix(data = as.factor(ifelse(year1_2_forecasts[,2] > 0.02, 
-                                        1,
-                                        0)), 
-                reference = year1_test$class, 
-                positive = "1") 
-
-
-# ROC Curve for test data
-roc.plot(ifelse(year1_test$class == "1", 1, 0),
-         year1_2_forecasts[,2])
-
-# ROC Area for test data
-roc.area(ifelse(year1_test$class == "1", 1, 0),
-         year1_2_forecasts[,2])
-
-
-
-
-############################################################ MODEL 3
-# Next logit did not work without that command
-registerDoSEQ()
-set.seed(361309)
-
-# Calculating logit with forward propagation with AIC as a cost function
-# year1_3 <-
-#   train(b_formula,
-#         data = year1_train,
-#         method = "glmStepAIC",
-#         direction = "both",
-#         trControl = ctrl_cv5)
 
 year1_3 <-
-  train(c_formula,
+  train(class ~ (. -
+                   Attr68 -
+                   Attr69),
+        data = year1_train,
+        method = "glmStepAIC",
+        direction = "backward",
+        trControl = ctrl_cv5)
+
+year1_3 <-
+  train(class ~ Attr3 + Attr6 + Attr13 + Attr22 + Attr29 + Attr30 + Attr32 + 
+          Attr39 + Attr41 + Attr42 + Attr44 + Attr48 + Attr51 + Attr52 + 
+          Attr55 + Attr62 + Attr66 + Attr67,
         data = year1_train,
         method = "glm",
         family = "binomial", 
         metric = "Sens",
         trControl = ctrl_cv5,
-        )
+  )
 year1_3
-
-# Forecasting probabilities for test data
-year1_3_forecasts <- predict(year1_3,
-                                     year1_test,
-                                     type = "prob")
-
-
+summary(year1_3)
 
 
 # Confusion matrix for test data
-confusionMatrix(data = as.factor(ifelse(year1_3_forecasts[,2] > 0.02, 
+confusionMatrix(data = as.factor(ifelse(year1_3_forecasts[,2] > 0.04, 
                                         1,
                                         0)), 
                 reference = year1_test$class, 
@@ -533,13 +408,12 @@ roc.area(ifelse(year1_test$class == "1", 1, 0),
          year1_3_forecasts[,2])
 
 
+################################################
 
-############################################################ MODEL 3.1
-# Calculating Model 3.1
 year1_31 <-
-  train(class ~  Attr6 + Attr12 + Attr33 + 
-          Attr38 + Attr49 + Attr57 + Attr65 + 
-          Attr66 - 1,
+  train(class ~ Attr3 + Attr13 + Attr22 + Attr29 + Attr30 + Attr32 + 
+          Attr39 + Attr41 + Attr44 + Attr52 + 
+         Attr62 + Attr66,
         data = year1_train,
         method = "glm",
         family = "binomial", 
@@ -547,6 +421,14 @@ year1_31 <-
         trControl = ctrl_cv5,
   )
 year1_31
+summary(year1_31)
+
+year1_31 <- glm(class ~ Attr3 + Attr13 + Attr22 + Attr29 + Attr30 + Attr32 + 
+  Attr39 + Attr41 + Attr44 + Attr52 + 
+  Attr62 + Attr66,
+data = year1_train,
+family = "binomial", 
+) 
 
 # Forecasting probabilities for test data
 year1_31_forecasts <- predict(year1_31,
@@ -557,7 +439,7 @@ year1_31_forecasts <- predict(year1_31,
 
 
 # Confusion matrix for test data
-confusionMatrix(data = as.factor(ifelse(year1_31_forecasts[,2] > 0.02, 
+confusionMatrix(data = as.factor(ifelse(year1_31_forecasts[,2] > 0.04, 
                                         1,
                                         0)), 
                 reference = year1_test$class, 
@@ -572,88 +454,15 @@ roc.plot(ifelse(year1_test$class == "1", 1, 0),
 roc.area(ifelse(year1_test$class == "1", 1, 0),
          year1_31_forecasts[,2])
 
-# Odds ratio for Model 3.1
-exp(year1_31$coefficients) %>%
+exp(year1_31$finalModel$coefficients) %>% 
   as.data.frame()
 
 # Marginal effects for Model 3.1
-effects_31_participation = margins(year1_31) 
-summary(effects_31_participation)
-plot(effects_31_participation)
+effects_logit_participation = margins(year1_31) 
+summary(effects_logit_participation)
+plot(effects_logit_participation)
 
 # Hosmer and Lemeshow GOF test for Model 3.1
-hl <- hoslem.test(year1_31$finalModel$y, year1_31$finalModel$fitted.values, g=10)
+hl <- hoslem.test(year1_31$y, year1_31$fitted.values, g=10)
 hl
 
-
-#----------------------------------------------------------------------- NEURAL
-
-
-# Load saved nnet model
-year1_nnet <- readRDS(file = "nnetFit.rda")
-
-
-
-
-
-fitControl <- trainControl(method = "repeatedcv", 
-                           number = 5,
-                           repeats = 2,
-                           classProbs = TRUE, 
-                           summaryFunction = customTwoClassSummary)
-
-# We try to choose the best number of nodes in hidden layer and the decay value for NN
-nnetGrid <-  expand.grid(size = seq(from = 60, to = 80, by = 5),
-                         decay = seq(from = 0.1, to = 0.3, by = 0.1))
-
-
-
-
-year1_nnet <- train(c_formula,
-                 data = year1_train,
-                 method = "nnet",
-                 metric = "ROC",
-                 trControl = ctrl_cv5,
-                 tuneGrid = nnetGrid,
-                 verbose = FALSE,
-                 MaxNWts = 3000,
-                 maxit = 350)
-year1_nnet
-
-# Predicting NN results on test data
-nnet_forecasts <- predict(year1_nnet,
-                                 year1_test,
-                                 type = "prob")
-
-
-# Confusion matrix for test data
-confusionMatrix(data = as.factor(ifelse(nnet_forecasts[2] > 0.02, 
-                                        1,
-                                        0)), 
-                reference = year1_test$class, 
-                positive = "1") 
-
-# ROC Curve for test data
-roc.plot(ifelse(year1_test$class == "1", 1, 0),
-         nnet_forecasts[,2])
-
-# ROC Area for test data
-roc.area(ifelse(year1_test$class == "1", 1, 0),
-         nnet_forecasts[,2])
-
-
-
-# Creating table in LaTeX but exporting it to html file
-stargazer(year1_1, year1_2, year1_3, year1_31, 
-          title="Results", 
-          align=TRUE,
-          out = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/tab2.html")
-
-
-
-# Saving models to files (DON'T)
-# saveRDS(year_31, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_31.rda")
-# saveRDS(year1_1, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_1.rda")
-# saveRDS(year1_2, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_2.rda")
-# saveRDS(year1_3, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_3.rda")
-# saveRDS(nnetFit, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/nnetFit_2.rda")
