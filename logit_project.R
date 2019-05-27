@@ -331,61 +331,156 @@ year1_test <- df5[-which_train,]
 
 
 ###################################### Creating models
+# Formula for basic model
+b_formula <- class ~ .
 
-# Basic formula for base model
-model_formula <- (class ~ . + Attr2:Attr29 + 
-                    I(Attr2^2) + 
+# Formula for basic + interactions
+b_i_formula <- (class ~ . + Attr2:Attr29 + Attr12_BINNED +
+                  I(Attr2^2) + 
+                    I(Attr25^3) +
+                    I(log1p(Attr61)) +
+                    I(log1p(Attr64)) +
+                    Attr66:Attr12_BINNED +
+                    Attr66:Attr38 +
                     Attr9:I(exp(Attr29)) + 
                     Attr2:Attr51 +
+                    Attr2:Attr66 +
+                    Attr2:Attr3 +
                     Attr3:Attr10 +
                     Attr3:Attr25 + 
                     Attr3:Attr38 +
                     Attr25:Attr38 +
                     Attr49:Attr56 +
                     Attr29:Attr55 - 
-                    Attr68 - 
                     Attr69 - 
                     Attr12) 
 
-# Calculating logit on all variables
-year1_base <- glm(model_formula,
-                data = year1_train,
-                family="binomial")
-summary(year1_base)
+# Formula for chosen + interactions
+c_i_formula <- (class ~ Attr2 + Attr6 + Attr10 + Attr15 + Attr33 + Attr38 + Attr50 + 
+                  Attr55 + Attr56 + Attr57 + Attr64 + Attr65 + Attr66 + Attr68 +
+                  I(Attr2^2) + 
+                  I(Attr25^3) + 
+                  Attr2:Attr51 + 
+                  Attr3:Attr10 + 
+                  Attr3:Attr38 + 
+                  Attr25:Attr38 + 
+                  Attr49:Attr56 + 
+                  Attr29:Attr55) 
+
+# Formula for chosen
+c_formula <- (class ~ Attr2 + Attr3 + Attr6 + Attr9 + Attr10 + Attr12 + Attr15 + Attr33 + 
+                      Attr38 + Attr49 + Attr50 + Attr51 + Attr56 + Attr57 + Attr65 + 
+                      Attr66 + Attr68)
 
 # Setting CrossValidation method
 ctrl_cv5 <- trainControl(method = "cv",
-                         number = 5)
+                         number = 5,
+                         summaryFunction = function(...) customTwoClassSummary(..., 
+                                                                               positive = "X1", negative="X0"), 
+                         classProbs = TRUE)
+
+customTwoClassSummary <- function(data, lev = NULL, model = NULL, positive = NULL, negative=NULL) 
+{
+  lvls <- levels(data$obs)
+  if (length(lvls) > 2) 
+    stop(paste("Your outcome has", length(lvls), "levels. The twoClassSummary() function isn't appropriate."))
+  caret:::requireNamespaceQuietStop("ModelMetrics")
+  if (!all(levels(data[, "pred"]) == lvls)) 
+    stop("levels of observed and predicted data do not match")
+  rocAUC <- ModelMetrics::auc(ifelse(data$obs == lev[2], 0, 
+                                     1), data[, lvls[1]])
+  probs <- data[,lvls[2]]
+  class <- as.factor(ifelse(probs > 0.03, lvls[2], lvls[1]))
+  out <- c(rocAUC, 
+           sensitivity(class, data[, "obs"], positive=positive), 
+           specificity(class, data[, "obs"], negative=negative)
+           )
+  names(out) <- c("ROC", "Sens", "Spec")
+  out
+}
+############################################################ ALL + INTER
+
+year1_b_i <-
+  train(b_i_formula,
+        data = year1_train,
+        method = "glm",
+        family = "binomial",
+        trControl = ctrl_cv5)
+year1_b_i
+
+# Calculating logit on all+inter variables
+year1_b_i <- glm(b_i_formula,
+                data = year1_train,
+                family="binomial")
+summary(year1_b_i)
+
+# Forecasting probabilities for test data
+year1_b_i_forecasts <- predict(year1_b_i,
+                                 year1_test,
+                                 type = "response")
+
+
+# Confusion matrix for test data
+confusionMatrix(data = as.factor(ifelse(year1_b_i_forecasts > 0.03, 
+                                        "1",
+                                        "0")), 
+                reference = year1_test$class, 
+                positive = "1")
+
+# ROC Curve for test data
+roc.plot(ifelse(year1_test$class == "1", 1, 0),
+         year1_b_i_forecasts)
+
+# ROC Area for test data
+roc.area(ifelse(year1_test$class == "1", 1, 0),
+         year1_b_i_forecasts)
+
+
+############################################################ AIC PROP ALL
+# Load logit model
+# year1_logit <- readRDS(file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_logit_forward.rda")
+
+
+
 
 # Next logit did not work without that command
 registerDoSEQ()
 set.seed(361309)
 
-
-# Load logit model
-year1_logit <- readRDS(file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_logit_forward.rda")
-
-
-
 # Calculating logit with forward propagation with AIC as a cost function
-# year1_logit <-
-#   train(model_formula,
-#         data = year1_train,
-#         method = "glmStepAIC",
-#         direction = "forward",
-#         trControl = ctrl_cv5)
-# summary(year1_logit)
+year1_c <-
+  train(b_formula,
+        data = year1_train,
+        method = "glmStepAIC",
+        direction = "both",
+        trControl = ctrl_cv5)
+
+year1_c <- glm(c_formula,
+                 data = year1_train,
+                 family="binomial")
+
+
+summary(year1_c)
+
+year1_c <-
+  train(c_formula,
+        data = year1_train,
+        method = "glm",
+        family = "binomial", 
+        metric = "Sens",
+        trControl = ctrl_cv5,
+        )
+year1_c
 
 
 # Predicting values on training set
-year1_logit_fitted <- predict(year1_logit,
-                                        year1_train,
-                                        type = "prob")
+year1_c_fitted <- predict(year1_c,
+                                  year1_train,
+                                  type = "response")
 
-head(year1_logit_fitted)
 
 # Confusion matrix for train data
-logit_matrix <- confusionMatrix(data = as.factor(ifelse(year1_logit_fitted["1"] > 0.05, 
+c_matrix <- confusionMatrix(data = as.factor(ifelse(year1_c_fitted > 0.03, 
                                         1,
                                         0)), 
                 reference = year1_train$class, 
@@ -393,15 +488,15 @@ logit_matrix <- confusionMatrix(data = as.factor(ifelse(year1_logit_fitted["1"] 
 
 
 # Forecasting probabilities for test data
-year1_logit_forecasts <- predict(year1_logit,
-                                           year1_test,
-                                           type = "prob")
+year1_c_forecasts <- predict(year1_c,
+                                     year1_test,
+                                     type = "response")
 
 
 
 
 # Confusion matrix for test data
-confusionMatrix(data = as.factor(ifelse(year1_logit_forecasts["1"] > 0.05, 
+confusionMatrix(data = as.factor(ifelse(year1_c_forecasts > 0.03, 
                                         1,
                                         0)), 
                 reference = year1_test$class, 
@@ -410,33 +505,106 @@ confusionMatrix(data = as.factor(ifelse(year1_logit_forecasts["1"] > 0.05,
 
 # ROC Curve for test data
 roc.plot(ifelse(year1_test$class == "1", 1, 0),
-         year1_logit_forecasts[,2])
+         year1_c_forecasts)
 
 # ROC Area for test data
 roc.area(ifelse(year1_test$class == "1", 1, 0),
-         year1_logit_forecasts[,2])
-
-# ROC Curve for train data
-roc.plot(ifelse(year1_train$class == "1", 1, 0),
-         year1_logit_fitted[,2])
-
-# ROC Area for train data
-roc.area(ifelse(year1_train$class == "1", 1, 0),
-         year1_logit_fitted[,2])
+         year1_c_forecasts)
 
 
 # Hosmer and Lemeshow GOF test
-hl <- hoslem.test(year1_logit$finalModel$y, year1_logit$finalModel$fitted.values, g=10)
+hl <- hoslem.test(year1_c$y, year1_c$fitted.values, g=10)
 hl
 
+exp(year1_c$coefficients) %>%
+  as.data.frame()
+  
+############################################################ AIC PROP ALL + INTER
+year1_c_i <-
+  train(c_i_formula,
+        data = year1_train,
+        method = "glm",
+        family = "binomial",
+        trControl = ctrl_cv5)
+year1_c_i
+
+
+# Next logit did not work without that command
+registerDoSEQ()
+set.seed(361309)
+
+# Calculating logit with forward propagation with AIC as a cost function
+year1_c_i <-
+  train(b_i_formula,
+        data = year1_train,
+        method = "glmStepAIC",
+        direction = "both",
+        trControl = ctrl_cv5)
+
+year1_c_i <- glm(c_i_formula,
+                 data = year1_train,
+                 family="binomial")
+
+summary(year1_c_i)
+
+
+# Predicting values on training set
+year1_c_i_fitted <- predict(year1_c_i,
+                              year1_train,
+                              type = "prob")
+
+head(year1_c_i_fitted)
+
+# Confusion matrix for train data
+c_i_matrix <- confusionMatrix(data = as.factor(ifelse(year1_c_i_fitted["1"] > 0.03, 
+                                                        1,
+                                                        0)), 
+                                reference = year1_train$class, 
+                                positive = "1") 
+
+
+# Forecasting probabilities for test data
+year1_c_i_forecasts <- predict(year1_c_i,
+                                 year1_test,
+                                 type = "response")
+
+
+
+
+# Confusion matrix for test data
+confusionMatrix(data = as.factor(ifelse(year1_c_i_forecasts > 0.03, 
+                                        1,
+                                        0)), 
+                reference = year1_test$class, 
+                positive = "1") 
+
+
+# ROC Curve for test data
+roc.plot(ifelse(year1_test$class == "1", 1, 0),
+         year1_c_i_forecasts)
+
+# ROC Area for test data
+roc.area(ifelse(year1_test$class == "1", 1, 0),
+         year1_c_i_forecasts)
+
+
+
+# Hosmer and Lemeshow GOF test
+hl <- hoslem.test(year1_c_i$finalModel$y, year1_c_i$finalModel$fitted.values, g=10)
+hl
+############################################################
+summary(year1_b_i)
+summary(year1_b)
+summary(year1_c)
+summary(year1_c_i)
 year1_logit_sum <- year1_logit$finalModel
 year1_logit_sum$call <- year1_base$call 
 
 # List of all variables in train set (maybe it will be useful somewhere)
-# s <- c("Attr2", "Attr3", "Attr5", "Attr6", "Attr9", "Attr10", "Attr12", "Attr15", 
-#        "Attr25", "Attr29", "Attr33", "Attr34", "Attr36", "Attr38", "Attr41", "Attr48", 
-#        "Attr49", "Attr50", "Attr51", "Attr55", "Attr56", "Attr57", "Attr59", "Attr61", 
-#        "Attr64", "Attr65",  "Attr67", "Attr68", "Attr66", "Attr69")
+# s <- c("Attr2", "Attr3", "Attr5", "Attr6", "Attr9", "Attr10", "Attr12", "Attr15",
+# "Attr25", "Attr29", "Attr33", "Attr34", "Attr36", "Attr38", "Attr41", "Attr48",
+# "Attr49", "Attr50", "Attr51", "Attr55", "Attr56", "Attr57", "Attr59", "Attr61",
+# "Attr64", "Attr65",  "Attr67", "Attr68", "Attr66", "Attr69")
 
 
 # Printing confusion matrices (can save those to .csv table)
@@ -452,14 +620,8 @@ as.matrix(logit_matrix, what = "classes")
 year1_nnet <- readRDS(file = "nnetFit.rda")
 
 
-
-# Formula with variables used in saved logit 
-small_formula <- class ~ Attr66 + Attr38 + Attr57 + Attr49 + Attr6 + Attr56 + 
-  Attr51 + Attr36 + Attr2 + Attr10 + Attr65
-
-
-# (??????NOT NEEDED???????) Releveling class so it is compatible with NeuralNetwork (although it messes up logit)
-# levels(year1_train$class) <- make.names(levels(factor(year1_train$class)))
+# Releveling class so it is compatible with NeuralNetwork (although it messes up logit)
+levels(year1_train$class) <- make.names(levels(factor(year1_train$class)))
 
 
 fitControl <- trainControl(method = "repeatedcv", 
@@ -468,18 +630,23 @@ fitControl <- trainControl(method = "repeatedcv",
                            summaryFunction = twoClassSummary)
 
 # We try to choose the best number of nodes in hidden layer and the decay value for NN
-# nnetGrid <-  expand.grid(size = seq(from = 60, to = 80, by = 5),
-#                          decay = seq(from = 0.1, to = 0.5, by = 0.1))
-# 
-# year1_nnet <- train(small_formula, 
-#                  data = year1_train,
-#                  method = "nnet",
-#                  metric = "ROC",
-#                  trControl = fitControl,
-#                  tuneGrid = nnetGrid,
-#                  verbose = FALSE,
-#                  maxit = 400)
-# year1_nnet
+nnetGrid <-  expand.grid(size = seq(from = 60, to = 70, by = 5),
+                         decay = seq(from = 0.1, to = 0.3, by = 0.1))
+
+scaled.dat <- year1_train %>% mutate_each_(funs(scale(.) %>% as.vector), 
+                             vars=s)
+
+
+year1_nnet <- train(c_formula,
+                 data = scaled.dat,
+                 method = "nnet",
+                 metric = "ROC",
+                 trControl = fitControl,
+                 tuneGrid = nnetGrid,
+                 verbose = FALSE,
+                 MaxNWts = 3000,
+                 maxit = 350)
+year1_nnet
 
 # Predicting NN results on test data
 nnet_forecasts <- predict(year1_nnet,
@@ -488,7 +655,7 @@ nnet_forecasts <- predict(year1_nnet,
 
 
 # Confusion matrix for test data
-nnet_matrix <- confusionMatrix(data = as.factor(ifelse(nnet_forecasts[2] > 0.05, 
+nnet_matrix <- confusionMatrix(data = as.factor(ifelse(nnet_forecasts[2] > 0.03, 
                                         1,
                                         0)), 
                 reference = year1_test$class, 
@@ -510,12 +677,14 @@ as.matrix(nnet_matrix, what = "classes")
 
 
 # Creating table in LaTeX but exporting it to html file
-stargazer(year1_base, year1_logit_sum, title="Results", align=TRUE,out = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/tab.html")
-
+stargazer(year1_b_i, year1_c_i, year1_c, 
+          title="Results", 
+          align=TRUE,
+          out = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/tab.html")
 
 
 
 # Saving models to files (DON'T)
 # saveRDS(year1_logit, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_logit_2.rda")
 # saveRDS(nnetFit, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/nnetFit_2.rda")
-
+# saveRDS(year1_base, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_base.rda")
