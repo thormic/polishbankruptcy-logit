@@ -373,8 +373,9 @@ c_formula <- (class ~ Attr2 + Attr3 + Attr6 + Attr9 + Attr10 + Attr12 + Attr15 +
                       Attr66 + Attr68)
 
 # Setting CrossValidation method
-ctrl_cv5 <- trainControl(method = "cv",
+ctrl_cv5 <- trainControl(method = "repeatedcv",
                          number = 5,
+                         repeats = 5,
                          summaryFunction = function(...) customTwoClassSummary(..., 
                                                                                positive = "X1", negative="X0"), 
                          classProbs = TRUE)
@@ -390,7 +391,7 @@ customTwoClassSummary <- function(data, lev = NULL, model = NULL, positive = NUL
   rocAUC <- ModelMetrics::auc(ifelse(data$obs == lev[2], 0, 
                                      1), data[, lvls[1]])
   probs <- data[,lvls[2]]
-  class <- as.factor(ifelse(probs > 0.03, lvls[2], lvls[1]))
+  class <- as.factor(ifelse(probs > 0.02, lvls[2], lvls[1]))
   out <- c(rocAUC, 
            sensitivity(class, data[, "obs"], positive=positive), 
            specificity(class, data[, "obs"], negative=negative)
@@ -421,7 +422,7 @@ year1_b_i_forecasts <- predict(year1_b_i,
 
 
 # Confusion matrix for test data
-confusionMatrix(data = as.factor(ifelse(year1_b_i_forecasts > 0.03, 
+confusionMatrix(data = as.factor(ifelse(year1_b_i_forecasts > 0.02, 
                                         "1",
                                         "0")), 
                 reference = year1_test$class, 
@@ -496,7 +497,7 @@ year1_c_forecasts <- predict(year1_c,
 
 
 # Confusion matrix for test data
-confusionMatrix(data = as.factor(ifelse(year1_c_forecasts > 0.03, 
+confusionMatrix(data = as.factor(ifelse(year1_c_forecasts > 0.02, 
                                         1,
                                         0)), 
                 reference = year1_test$class, 
@@ -572,7 +573,7 @@ year1_c_i_forecasts <- predict(year1_c_i,
 
 
 # Confusion matrix for test data
-confusionMatrix(data = as.factor(ifelse(year1_c_i_forecasts > 0.03, 
+confusionMatrix(data = as.factor(ifelse(year1_c_i_forecasts > 0.02, 
                                         1,
                                         0)), 
                 reference = year1_test$class, 
