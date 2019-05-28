@@ -353,7 +353,7 @@ customTwoClassSummary <- function(data, lev = NULL, model = NULL, positive = NUL
   rocAUC <- ModelMetrics::auc(ifelse(data$obs == lev[2], 0, 
                                      1), data[, lvls[1]])
   probs <- data[,lvls[2]]
-  class <- as.factor(ifelse(probs > 0.04, lvls[2], lvls[1]))
+  class <- as.factor(ifelse(probs > 0.03, lvls[2], lvls[1]))
   out <- c(rocAUC, 
            sensitivity(class, data[, "obs"], positive=positive), 
            specificity(class, data[, "obs"], negative=negative)
@@ -390,6 +390,10 @@ year1_3 <-
 year1_3
 summary(year1_3)
 
+# Forecasting probabilities for test data
+year1_3_forecasts <- predict(year1_3,
+                              year1_test,
+                              type = "prob")
 
 # Confusion matrix for test data
 confusionMatrix(data = as.factor(ifelse(year1_3_forecasts[,2] > 0.04, 
@@ -411,7 +415,7 @@ roc.area(ifelse(year1_test$class == "1", 1, 0),
 ################################################
 
 year1_31 <-
-  train(class ~ Attr3 + Attr13 + Attr22 + Attr29 + Attr30 + Attr32 + 
+  train(class ~ Attr3 + Attr13  + Attr29 + Attr30 + Attr32 + 
           Attr39 + Attr41 + Attr44 + Attr52 + 
          Attr62 + Attr66,
         data = year1_train,
@@ -423,7 +427,7 @@ year1_31 <-
 year1_31
 summary(year1_31)
 
-year1_31 <- glm(class ~ Attr3 + Attr13 + Attr22 + Attr29 + Attr30 + Attr32 + 
+year1_31 <- glm(class ~ Attr3 + Attr13 + Attr29 + Attr30 + Attr32 + 
   Attr39 + Attr41 + Attr44 + Attr52 + 
   Attr62 + Attr66,
 data = year1_train,
@@ -439,7 +443,7 @@ year1_31_forecasts <- predict(year1_31,
 
 
 # Confusion matrix for test data
-confusionMatrix(data = as.factor(ifelse(year1_31_forecasts[,2] > 0.04, 
+confusionMatrix(data = as.factor(ifelse(year1_31_forecasts[,2] > 0.03, 
                                         1,
                                         0)), 
                 reference = year1_test$class, 
@@ -462,7 +466,4 @@ effects_logit_participation = margins(year1_31)
 summary(effects_logit_participation)
 plot(effects_logit_participation)
 
-# Hosmer and Lemeshow GOF test for Model 3.1
-hl <- hoslem.test(year1_31$y, year1_31$fitted.values, g=10)
-hl
 
