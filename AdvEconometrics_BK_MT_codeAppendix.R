@@ -280,15 +280,14 @@ ggplot(gather(df5[,-which(names(df5) %in% factor_vars)]), aes(value)) +
   facet_wrap(~key, scales = 'free_x') +
   ylim(0, 700)
 
-
 # Checking those varaibles with a lot of zeroes
 prop.table(table(df4$Attr6 == 0))
 prop.table(table(df4$Attr59 == 0))
 # ~ 41% of zeros in both cases
 
+# Checking variables with near zero variance
 nearZeroVar(df5,
             saveMetrics = TRUE)
-# Incentive to remove Attr69 from further analysis - no variance and constant values of 0
 
 
 # Outliers boxplot
@@ -539,7 +538,7 @@ roc.area(ifelse(year1_test$class == "1", 1, 0),
 year1_31 <-
   train(class ~  Attr6 + Attr12 + Attr33 + 
           Attr38 + Attr49 + Attr57 + Attr65 + 
-          Attr66 - 1,
+          Attr66,
         data = year1_train,
         method = "glm",
         family = "binomial", 
@@ -573,10 +572,11 @@ roc.area(ifelse(year1_test$class == "1", 1, 0),
          year1_31_forecasts[,2])
 
 # Odds ratio for Model 3.1
-exp(year1_31$coefficients) %>%
+exp(year1_31$finalModel$coefficients) %>%
   as.data.frame()
 
-# Marginal effects for Model 3.1
+# Marginal effects for Model 3.1 (works for glm object, so for it to work
+# one have to simply retype the formula and create glm object instead of train)
 effects_31_participation = margins(year1_31) 
 summary(effects_31_participation)
 plot(effects_31_participation)
@@ -586,19 +586,11 @@ hl <- hoslem.test(year1_31$finalModel$y, year1_31$finalModel$fitted.values, g=10
 hl
 
 
-#----------------------------------------------------------------------- NEURAL
-
-
-# Load saved nnet model
-year1_nnet <- readRDS(file = "nnetFit.rda")
-
-
-
-
+#----------------------------------------------------------------------- ONE LAYER PERCEPTRON
 
 fitControl <- trainControl(method = "repeatedcv", 
                            number = 5,
-                           repeats = 2,
+                           repeats = 5,
                            classProbs = TRUE, 
                            summaryFunction = customTwoClassSummary)
 
@@ -607,12 +599,10 @@ nnetGrid <-  expand.grid(size = seq(from = 60, to = 80, by = 5),
                          decay = seq(from = 0.1, to = 0.3, by = 0.1))
 
 
-
-
 year1_nnet <- train(c_formula,
                  data = year1_train,
                  method = "nnet",
-                 metric = "ROC",
+                 metric = "Sens",
                  trControl = ctrl_cv5,
                  tuneGrid = nnetGrid,
                  verbose = FALSE,
@@ -651,7 +641,7 @@ stargazer(year1_1, year1_2, year1_3, year1_31,
 
 
 
-# Saving models to files (DON'T)
+# Saving models to files (DO NOT)
 # saveRDS(year_31, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_31.rda")
 # saveRDS(year1_1, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_1.rda")
 # saveRDS(year1_2, file = "C:/Users/Michał/GIT/polishBankruptcyPredictionLogit/year1_2.rda")

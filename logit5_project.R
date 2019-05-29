@@ -153,14 +153,11 @@ omit_cols <- c("Attr16", "Attr26", "Attr41", "Attr32", "Attr47", "Attr52", "Attr
 
 
 df2 <- df1[complete.cases(df1[, omit_cols]), ]
-# Retained ~3.84% level of defaults in dataset
 
 
-# Left one obs with 19 NA's and a lot of obs with 1 NA 
 
 rownames(df2) <- NULL
 
-# Getting all the rows with over 2 NA values - only one observation in our case
 na_rows <- df2 %>% 
   rowwise() %>% 
   is.na() %>% 
@@ -172,7 +169,6 @@ na_rows <- df2 %>%
   as.vector()
 
 
-# Replacing NA's in 11 and 61 with median (having a binary variable indicating that these were missing)
 df2 <- df2 %>% 
   mutate(Attr61 = ifelse(is.na(Attr61),
                          median(Attr61, na.rm = TRUE),
